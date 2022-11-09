@@ -35,12 +35,10 @@ from django.conf import settings
 
 from .pinning import this_thread_is_pinned, db_write  # noqa
 
-
 VERSION = (0, 10, 0)
 __version__ = '.'.join(map(str, VERSION))
 
 DEFAULT_DB_ALIAS = 'default'
-
 
 replicas = None
 
@@ -138,10 +136,34 @@ class PinningReplicaRouter(ReplicaRouter):
     The flag comes from that cookie.
 
     """
+
     def db_for_read(self, model, **hints):
         """Send reads to replicas in round-robin unless this thread is "stuck" to
         the master."""
-        return DEFAULT_DB_ALIAS if this_thread_is_pinned() else get_replica()
+        from django.core.cache import cache
+        from datetime import datetime
+        from django.conf import settings
+
+        replica = DEFAULT_DB_ALIAS if this_thread_is_pinned() else get_replica()
+        if this_thread_is_pinned():
+            time_now = datetime.utcnow()
+            time_before = cache.get(model.__name__)
+            if time_before:
+                total_seconds = (time_now - time_before).total_seconds()
+
+                if total_seconds < settings.MULTIDB_PINNING_SECONDS:
+                    return DEFAULT_DB_ALIAS
+
+                return get_replica()
+
+        return replica
+
+    def db_for_write(self, model, **hints):
+        from django.core.cache import cache
+        from datetime import datetime
+
+        cache.set(model.__name__, datetime.utcnow())
+        return super().db_for_write(model, **hints)
 
 
 class MasterSlaveRouter(DeprecationMixin, ReplicaRouter):
