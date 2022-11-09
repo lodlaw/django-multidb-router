@@ -154,7 +154,7 @@ class PinningReplicaRouter(ReplicaRouter):
                 if total_seconds < settings.MULTIDB_PINNING_SECONDS:
                     return DEFAULT_DB_ALIAS
 
-                return get_replica()
+            return get_replica()
 
         return replica
 
